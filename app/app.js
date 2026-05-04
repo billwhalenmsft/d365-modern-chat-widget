@@ -80,30 +80,52 @@
     // Check localStorage for saved session
     const savedUser = localStorage.getItem('d365_user');
     const savedToken = localStorage.getItem('d365_github_token');
-    
+
     if (savedUser && savedToken) {
-      state.user = JSON.parse(savedUser);
-      state.githubToken = savedToken;
-      
-      // Verify token is still valid
+      // Trust the saved session optimistically — go straight to the dashboard
+      // so transient GitHub API issues (rate limits, network blips, 5xx,
+      // CORS, ad-blockers) don't kick already-logged-in users back to the
+      // token entry screen. We re-validate quietly in the background and
+      // only clear the session on a *confirmed* 401 Unauthorized.
       try {
-        const res = await fetch('https://api.github.com/user', {
-          headers: { 'Authorization': 'token ' + savedToken }
-        });
-        if (res.ok) {
-          showDashboard();
-          return;
-        }
+        state.user = JSON.parse(savedUser);
       } catch (e) {
-        console.log('Saved token invalid');
+        // Corrupt user record — fall through to login.
+        localStorage.removeItem('d365_user');
+        localStorage.removeItem('d365_github_token');
+        showScreen('login');
+        return;
       }
-      
-      // Clear invalid session
-      localStorage.removeItem('d365_user');
-      localStorage.removeItem('d365_github_token');
+      state.githubToken = savedToken;
+      showDashboard();
+      validateTokenInBackground(savedToken);
+      return;
     }
 
     showScreen('login');
+  }
+
+  // Background re-validation: only sign the user out if GitHub explicitly
+  // says the token is no longer authorized (HTTP 401). Any other failure
+  // (403 rate limit, 5xx, network/CORS errors) is treated as transient and
+  // the session is preserved.
+  async function validateTokenInBackground(token) {
+    try {
+      const res = await fetch('https://api.github.com/user', {
+        headers: { 'Authorization': 'token ' + token }
+      });
+      if (res.status === 401) {
+        console.warn('Saved GitHub token is no longer valid (401). Signing out.');
+        localStorage.removeItem('d365_user');
+        localStorage.removeItem('d365_github_token');
+        state.user = null;
+        state.githubToken = null;
+        showScreen('login');
+      }
+    } catch (e) {
+      // Network/CORS error — keep the session, user can keep working.
+      console.log('Background token validation skipped:', e && e.message);
+    }
   }
 
   async function getGitHubToken() {
