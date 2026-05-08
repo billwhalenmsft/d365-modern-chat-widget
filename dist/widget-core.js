@@ -45,8 +45,13 @@
 
       console.log('%c📊 WIDGET-CORE TRACKING EVENT: ' + eventType + ' | Domain: ' + domain, 'background: #667eea; color: white; padding: 2px 6px; border-radius: 3px;');
 
+      // Prefer Tampermonkey-bridged fetch (bypasses page CSP connect-src) when available.
+      var fetchFn = (typeof window !== 'undefined' && typeof window.D365GMFetch === 'function')
+        ? window.D365GMFetch
+        : fetch;
+
       // Send to Cloudflare Worker
-      fetch('https://d365-widget-analytics.mauricio-o-pinto.workers.dev/track', {
+      fetchFn('https://d365-widget-analytics.mauricio-o-pinto.workers.dev/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(event)
@@ -663,6 +668,12 @@
     var acIndex = 0;
 
     function loadAC() {
+      // Skip if AdaptiveCards is already present (e.g. preloaded by Tampermonkey wrapper)
+      if (typeof window.AdaptiveCards !== 'undefined' || typeof AdaptiveCards !== 'undefined') {
+        console.log('D365 Widget: AdaptiveCards already loaded, skipping fetch');
+        checkDone();
+        return;
+      }
       if (acIndex >= acSources.length) {
         console.warn('D365 Widget: AdaptiveCards failed to load from all sources');
         checkDone();
@@ -687,6 +698,12 @@
     var sdkIndex = 0;
 
     function loadSDK() {
+      // Skip if Chat SDK is already present (e.g. preloaded by Tampermonkey wrapper)
+      if (typeof window.OmnichannelChatSDK !== 'undefined' || typeof OmnichannelChatSDK !== 'undefined') {
+        console.log('D365 Widget: OmnichannelChatSDK already loaded, skipping fetch');
+        checkDone();
+        return;
+      }
       if (sdkIndex >= sdkSources.length) {
         console.error('D365 Widget: Failed to load Chat SDK');
         checkDone();
@@ -768,7 +785,10 @@
 
     // Sound notification setup
     var soundEnabled = localStorage.getItem('d365SoundEnabled') !== 'false';
-    var notificationAudio = new Audio('https://moliveirapinto.github.io/d365-modern-chat-widget/notification/new-notification-3-398649.mp3');
+    // Allow Tampermonkey wrapper to provide a CSP-safe blob URL via window.D365NotificationSoundUrl
+    var notificationSoundUrl = (typeof window !== 'undefined' && window.D365NotificationSoundUrl) ||
+      'https://moliveirapinto.github.io/d365-modern-chat-widget/notification/new-notification-3-398649.mp3';
+    var notificationAudio = new Audio(notificationSoundUrl);
     notificationAudio.volume = 0.5;
 
     // Initialize sound button state

@@ -12946,14 +12946,19 @@ ${googleFontLink ? `\n<!-- Google Font -->\n<link href="${googleFontLink}" rel="
             return `// ==UserScript==
 // @name         ${scriptName} – D365 Chat Widget Injector
 // @namespace    https://moliveirapinto.github.io/d365-modern-chat-widget/
-// @version      1.0
+// @version      1.1
 // @description  Injects the D365 Modern Chat Widget with voice/video calling support.
 // @author       D365 Chat Widget Generator
 // @match        ${targetUrl}
 // @run-at       document-start
 // @grant        GM_addElement
+// @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      moliveirapinto.github.io
+// @connect      raw.githubusercontent.com
+// @connect      cdnjs.cloudflare.com
+// @connect      unpkg.com
+// @connect      d365-widget-analytics.mauricio-o-pinto.workers.dev
 // @connect      oc-cdn-ocprod.azureedge.net
 // @connect      oc-cdn-public.azureedge.net
 // @connect      oc-cdn-public-eur.azureedge.net
@@ -12986,6 +12991,78 @@ ${googleFontLink ? `\n<!-- Google Font -->\n<link href="${googleFontLink}" rel="
   // --- Widget Configuration ---
   // Set on pageWindow so widget-core.js (running in page context) can read it
   pageWindow.D365WidgetConfig = ${configObjectStr};
+
+  // --- CSP bypass helpers exposed to page context ---
+  // The page's CSP would normally block scripts loaded from github.io, raw.githubusercontent.com,
+  // cdnjs, unpkg, etc. GM_addElement bypasses CSP, but it's only available inside the
+  // userscript context. Expose it (and a fetch shim) on pageWindow so widget-core.js — which
+  // runs in the PAGE context — can use them too. This is what allows CallingBundle.js,
+  // AdaptiveCards, and the chat SDK bundle to load on strict CSP sites like rei.com / m&s.
+  if (typeof GM_addElement === 'function') {
+    try { pageWindow.GM_addElement = GM_addElement; } catch (e) { /* sandbox restriction */ }
+  }
+
+  // Bridge a GM_fetch-like helper so widget-core.js can POST analytics through the userscript
+  // (bypasses connect-src CSP). widget-core.js falls back gracefully if missing.
+  if (typeof GM_xmlhttpRequest === 'function') {
+    pageWindow.D365GMFetch = function (url, opts) {
+      opts = opts || {};
+      return new Promise(function (resolve, reject) {
+        GM_xmlhttpRequest({
+          method: opts.method || 'GET',
+          url: url,
+          headers: opts.headers || {},
+          data: opts.body || null,
+          onload: function (r) {
+            resolve({ ok: r.status >= 200 && r.status < 300, status: r.status, text: function () { return Promise.resolve(r.responseText); } });
+          },
+          onerror: function (e) { reject(e); },
+          ontimeout: function () { reject(new Error('timeout')); }
+        });
+      });
+    };
+  }
+
+  // --- Pre-fetch the notification sound as a blob URL (CSP media-src bypass) ---
+  function preloadNotificationSound() {
+    if (typeof GM_xmlhttpRequest !== 'function') return;
+    try {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: 'https://moliveirapinto.github.io/d365-modern-chat-widget/notification/new-notification-3-398649.mp3',
+        responseType: 'blob',
+        onload: function (r) {
+          if (r.response) {
+            try { pageWindow.D365NotificationSoundUrl = URL.createObjectURL(r.response); } catch (e) { /* ignore */ }
+          }
+        }
+      });
+    } catch (e) { /* ignore */ }
+  }
+  preloadNotificationSound();
+
+  // --- Pre-load chat SDK bundle and Adaptive Cards via GM_addElement (CSP bypass) ---
+  // Loading these BEFORE widget-core.js means widget-core.js sees the globals and skips its
+  // own injection (which would otherwise be blocked by the page CSP).
+  function preloadDeps(done) {
+    if (typeof GM_addElement !== 'function') { done(); return; }
+    var pending = 2;
+    function maybeDone() { if (--pending <= 0) done(); }
+    function inject(src, label) {
+      try {
+        var el = GM_addElement('script', { src: src, type: 'text/javascript' });
+        if (el && el.addEventListener) {
+          el.addEventListener('load', function () { console.log('[D365 TM] Pre-loaded ' + label); maybeDone(); });
+          el.addEventListener('error', function () { console.warn('[D365 TM] Failed to pre-load ' + label); maybeDone(); });
+        } else {
+          // GM_addElement sometimes returns nothing — give the browser a moment then continue
+          setTimeout(maybeDone, 1500);
+        }
+      } catch (e) { console.warn('[D365 TM] preload error ' + label, e); maybeDone(); }
+    }
+    inject('https://moliveirapinto.github.io/d365-modern-chat-widget/dist/chat-sdk-bundle.js', 'chat-sdk-bundle.js');
+    inject('https://moliveirapinto.github.io/d365-modern-chat-widget/dist/adaptivecards.min.js', 'adaptivecards.min.js');
+  }
 
   // --- Loader injection ---
   // Uses GM_addElement when available to bypass Content Security Policy (CSP).
@@ -13025,22 +13102,27 @@ ${googleFontLink ? `\n<!-- Google Font -->\n<link href="${googleFontLink}" rel="
     }
   }
 
+  // Pre-load deps first, then inject widget-core.js. Safe to call early.
+  function start() {
+    preloadDeps(function () { injectLoader(); });
+  }
+
   // Inject as early as possible; if DOM not ready, retry shortly
   if (document.head) {
-    injectLoader();
+    start();
   } else {
     // Early pages sometimes don't have <head> yet at document-start
     const tryEarly = setInterval(() => {
       if (document.head || document.getElementsByTagName('head')[0]) {
         clearInterval(tryEarly);
-        injectLoader();
+        start();
       }
     }, 25);
 
     // Hard fallback at DOMContentLoaded
     document.addEventListener('DOMContentLoaded', () => {
       clearInterval(tryEarly);
-      injectLoader();
+      start();
     });
   }
 })();`;
