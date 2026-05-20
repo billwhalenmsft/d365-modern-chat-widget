@@ -16,6 +16,14 @@
             }
         })();
     </script>
+    <!-- Power Pages host bridge: small status pill + buttons -->
+    <style>
+        .pp-status-pill { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:600; letter-spacing:0.02em; background:#e2e8f0; color:#475569; margin-right:8px; white-space:nowrap; }
+        .pp-status-pill.pp-connected { background:linear-gradient(135deg,#10b981,#059669); color:#fff; }
+        [data-theme="dark"] .pp-status-pill { background:#334155; color:#cbd5e1; }
+        .pp-apply-wrap { display:none; align-items:center; gap:6px; font-size:12px; color:#64748b; margin-right:4px; }
+        [data-theme="dark"] .pp-apply-wrap { color:#94a3b8; }
+    </style>
 </head>
 <body>
     <!-- Login Screen -->
@@ -89,6 +97,7 @@
                 <span>Widget Studio</span>
             </div>
             <div class="header-user">
+                <span class="pp-status-pill" data-pp-status>Standalone</span>
                 <img id="userAvatar" src="" alt="">
                 <span id="userName"></span>
                 <button class="btn-icon btn-theme" onclick="app.toggleTheme()" title="Toggle dark/light mode">
@@ -129,12 +138,24 @@
             </button>
             <input type="text" id="widgetName" class="widget-name-input" placeholder="Widget Name" value="My Chat Widget">
             <div class="editor-actions">
+                <span class="pp-status-pill" data-pp-status>Standalone</span>
+                <button id="ppPullBtn" class="btn-secondary" style="display:none" title="Pull current snippet from Power Pages">
+                    <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                    Pull from Power Pages
+                </button>
+                <label id="ppApplyImmediatelyWrap" class="pp-apply-wrap">
+                    <input type="checkbox" id="ppApplyImmediately"> Apply immediately
+                </label>
+                <button id="ppExportBtn" class="btn-primary" style="display:none" title="Push current design to Power Pages">
+                    <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle"><path fill="currentColor" d="M5 20h14v-2H5v2zM5 10h4v6h6v-6h4l-7-7-7 7z"/></svg>
+                    Export to Power Pages
+                </button>
                 <button class="btn-icon btn-theme" onclick="app.toggleTheme()" title="Toggle dark/light mode">
                     <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
                     <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
                 </button>
                 <button id="previewBtn" class="btn-secondary">Preview</button>
-                <button id="saveBtn" class="btn-primary">Save & Get Code</button>
+                <button id="saveBtn" class="btn-primary">Save &amp; Get Code</button>
             </div>
         </header>
         
@@ -344,7 +365,7 @@
                 </div>
                 <div class="code-stats">
                     <span id="codeSize"></span> characters
-                    <span class="success-badge">✓ Power Pages compatible</span>
+                    <span class="success-badge">&#10003; Power Pages compatible</span>
                 </div>
             </div>
         </div>
@@ -359,6 +380,7 @@
         <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1z"/></svg>
     </button>
 
-    <script src="app.js?v=3.1.1"></script>
+    <script src="powerPagesHost.js?v=3.2.0"></script>
+    <script src="app.js?v=3.2.0"></script>
 </body>
 </html>
