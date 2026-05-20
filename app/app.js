@@ -23,6 +23,10 @@
   // Screens (initialized after DOM ready)
   let screens = {};
 
+  // Power Pages bridge state (no-op when not framed)
+  let pendingApplyOnNextLoadEmbed = false;
+  let lastReceivedHostSnippet = null;
+
   // Initialize app when DOM is ready
   function init() {
     // Initialize screen references
@@ -34,6 +38,7 @@
     
     initTheme();
     setupEventListeners();
+    initPowerPagesBridge();
     checkAuth();
   }
 
@@ -162,8 +167,10 @@
       btn.onclick = () => switchTab(btn.dataset.tab);
     });
 
-    // Form changes
+    // Form changes — mark dirty + repreview. The Power Pages "Apply immediately"
+    // checkbox is excluded so toggling it doesn't trip the unsaved-changes prompt.
     $$('#editorScreen input, #editorScreen textarea').forEach(el => {
+      if (el.id === 'ppApplyImmediately') return;
       el.oninput = () => {
         state.isDirty = true;
         updatePreview();
@@ -687,6 +694,134 @@ var D365WidgetConfig = ${inlineConfig};
     showDashboard();
   }
 
+  // ==========================================
+  // Power Pages host bridge wiring
+  // ==========================================
+
+  function setPowerPagesConnectedUi(connected) {
+    // Status pills (one in each header)
+    $$('.pp-status-pill').forEach(function (el) {
+      el.textContent = connected ? 'Connected to Power Pages' : 'Standalone';
+      el.classList.toggle('pp-connected', connected);
+    });
+    // Editor toolbar affordances — hidden until host announces itself
+    var ex = $('ppExportBtn');
+    var pl = $('ppPullBtn');
+    var ap = $('ppApplyImmediatelyWrap');
+    if (ex) ex.style.display = connected ? 'inline-flex' : 'none';
+    if (pl) pl.style.display = connected ? 'inline-flex' : 'none';
+    if (ap) ap.style.display = connected ? 'inline-flex' : 'none';
+  }
+
+  function initPowerPagesBridge() {
+    var bridge = window.PowerPagesHost;
+    if (!bridge) return; // module not loaded — safe no-op
+
+    setPowerPagesConnectedUi(false);
+
+    bridge.onHostReady(function () {
+      setPowerPagesConnectedUi(true);
+    });
+
+    bridge.onLoadEmbed(function (code) {
+      lastReceivedHostSnippet = code || '';
+      if (pendingApplyOnNextLoadEmbed) {
+        pendingApplyOnNextLoadEmbed = false;
+        applyHostSnippetToEditor(lastReceivedHostSnippet);
+        return;
+      }
+      // Initial / unsolicited push: do NOT clobber in-progress work.
+      var editorActive = screens.editor && screens.editor.classList.contains('active');
+      if (editorActive && state.isDirty) {
+        showToast('Power Pages snippet received — click "Pull" to load');
+      } else if (editorActive) {
+        // Editor open, no unsaved changes — safe to apply
+        applyHostSnippetToEditor(lastReceivedHostSnippet);
+      } else {
+        showToast('Power Pages snippet received — click "Pull" to load');
+      }
+    });
+
+    bridge.onExportAck(function () {
+      showToast('Power Pages received the snippet');
+    });
+
+    // Wire toolbar buttons (no-op clicks are harmless before host-ready)
+    var ex = $('ppExportBtn'); if (ex) ex.onclick = exportToPowerPages;
+    var pl = $('ppPullBtn');   if (pl) pl.onclick = pullFromPowerPages;
+
+    // Announce we are ready. Host will respond with cws:host-ready and
+    // (typically) a follow-up cws:load-embed with the current snippet.
+    bridge.sendReady();
+  }
+
+  function parseHostEmbedSnippet(code) {
+    if (!code || typeof code !== 'string') return null;
+    var m = code.match(/D365WidgetConfig\s*=\s*(\{[\s\S]*?\})\s*;/);
+    if (!m) return null;
+    try { return JSON.parse(m[1]); } catch (e) { return null; }
+  }
+
+  function applyHostSnippetToEditor(code) {
+    var cfg = parseHostEmbedSnippet(code);
+    if (!cfg) {
+      // Could not decode — show raw in the embed modal so the SE can inspect.
+      $('embedCode').textContent = code || '';
+      $('codeSize').textContent = (code || '').length.toLocaleString();
+      $('embedModal').classList.add('show');
+      showToast('Snippet received — showing raw code (could not decode)');
+      return;
+    }
+    var merged = Object.assign({}, getDefaultConfig(), cfg);
+    if (!state.currentWidget) {
+      state.currentWidget = { id: null, name: 'Power Pages Widget', config: merged };
+    } else {
+      state.currentWidget.config = merged;
+    }
+    showEditor();
+    showToast('Loaded snippet from Power Pages');
+  }
+
+  function pullFromPowerPages() {
+    if (!window.PowerPagesHost || !window.PowerPagesHost.isHostReady()) {
+      showToast('Power Pages host not connected');
+      return;
+    }
+    // If host has already pushed us a snippet, apply it now and also
+    // request a fresh copy in case it changed.
+    if (lastReceivedHostSnippet) {
+      applyHostSnippetToEditor(lastReceivedHostSnippet);
+      window.PowerPagesHost.requestCurrent();
+      return;
+    }
+    pendingApplyOnNextLoadEmbed = true;
+    window.PowerPagesHost.requestCurrent();
+    showToast('Requesting current snippet from Power Pages…');
+  }
+
+  function exportToPowerPages() {
+    if (!window.PowerPagesHost || !window.PowerPagesHost.isHostReady()) {
+      showToast('Power Pages host not connected');
+      return;
+    }
+    if (!state.currentWidget) {
+      showToast('Open or create a widget first');
+      return;
+    }
+    var config = getFormConfig();
+    if (!config.orgId || !config.orgUrl || !config.widgetId) {
+      showToast('Fill in D365 connection settings before exporting');
+      switchTab('connection');
+      return;
+    }
+    var gistId = state.currentWidget && state.currentWidget.id;
+    var code = generateEmbedCode(gistId, config);
+    var auto = !!($('ppApplyImmediately') && $('ppApplyImmediately').checked);
+    var profile = ($('widgetName') && $('widgetName').value || '').trim() || null;
+    window.PowerPagesHost.exportEmbed({ code: code, auto: auto, profile: profile });
+    showToast(auto ? 'Sent to Power Pages (auto-apply)' : 'Sent to Power Pages — awaiting Apply');
+  }
+
   // Utilities
   function escapeHtml(str) {
     const div = document.createElement('div');
@@ -718,7 +853,9 @@ var D365WidgetConfig = ${inlineConfig};
     editWidget,
     getCode,
     deleteWidget,
-    toggleTheme
+    toggleTheme,
+    exportToPowerPages,
+    pullFromPowerPages
   };
 
   // Start app when DOM is ready
