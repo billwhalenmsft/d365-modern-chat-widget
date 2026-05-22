@@ -2967,6 +2967,23 @@
         }
 
     </style>
+
+    <!-- Gist ID pre-selector: reads ?gistId= URL param and sets active profile before app boots -->
+    <script>
+    (function(){
+      try{
+        var p=new URLSearchParams(location.search),gid=p.get('gistId');
+        if(!gid)return;
+        window.__cwsPreloadGistId=gid;
+        var raw=localStorage.getItem('chatWidgetProfiles');
+        if(raw){
+          var profiles=JSON.parse(raw);
+          var m=profiles.find(function(x){return x.cloudId===gid;});
+          if(m){localStorage.setItem('chatWidgetActiveProfile',m.id);}
+        }
+      }catch(e){}
+    })();
+    </script>
 </head>
 <body>
     <!-- Login Overlay -->
