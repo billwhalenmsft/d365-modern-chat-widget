@@ -7660,10 +7660,19 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            // Check for existing GitHub login
+            // If launched from the portal with a gistId URL param, auto-skip login.
+            // Cross-origin iframes can't reliably access localStorage, and the gist
+            // can be read without auth. Login is still prompted when the user saves.
+            const _urlGistId = new URLSearchParams(location.search).get('gistId');
+            const _embeddedMode = !!_urlGistId || window.self !== window.top;
+
             if (!checkExistingLogin()) {
-                // No existing login - show login overlay
-                // (user can skip if they want)
+                if (_embeddedMode) {
+                    // Auto-dismiss login overlay — user is coming from the portal
+                    const lo = document.getElementById('loginOverlay');
+                    if (lo) lo.classList.add('hidden');
+                }
+                // else: not embedded — login overlay stays visible (normal standalone use)
             }
             
             loadCurrentUser();
