@@ -2984,6 +2984,40 @@
       }catch(e){}
     })();
     </script>
+    <!-- Portal D365 connection pre-fill: reads ?appId=&orgId=&orgUrl= params -->
+    <script>
+    (function(){
+      try{
+        var p = new URLSearchParams(location.search);
+        var appId  = p.get('appId');
+        var orgId  = p.get('orgId');
+        var orgUrl = p.get('orgUrl');
+        if (!appId && !orgId && !orgUrl) return;
+        // Store as pending pre-fill; the app reads this after boot
+        window.__cwsPreloadD365 = { appId: appId||'', orgId: orgId||'', orgUrl: orgUrl||'' };
+        // Also try to apply to active profile in localStorage immediately
+        var activeId = localStorage.getItem('chatWidgetActiveProfile');
+        if (!activeId) return;
+        var raw = localStorage.getItem('chatWidgetProfiles');
+        if (!raw) return;
+        var profiles = JSON.parse(raw);
+        var idx = profiles.findIndex(function(x){ return x.id === activeId; });
+        if (idx < 0) return;
+        var prof = profiles[idx];
+        if (!prof.settings) prof.settings = {};
+        if (appId)  prof.settings.widgetId = appId;
+        if (orgId)  prof.settings.orgId    = orgId;
+        if (orgUrl) prof.settings.orgUrl   = orgUrl;
+        profiles[idx] = prof;
+        localStorage.setItem('chatWidgetProfiles', JSON.stringify(profiles));
+      }catch(e){}
+    })();
+    </script>ofiles.find(function(x){return x.cloudId===gid;});
+          if(m){localStorage.setItem('chatWidgetActiveProfile',m.id);}
+        }
+      }catch(e){}
+    })();
+    </script>
     <!-- PORTAL: embed mode — hide header when ?embed=1 -->
     <script>
     (function(){
