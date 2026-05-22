@@ -2984,6 +2984,18 @@
       }catch(e){}
     })();
     </script>
+    <!-- PORTAL: embed mode — hide header when ?embed=1 -->
+    <script>
+    (function(){
+      try {
+        if(new URLSearchParams(location.search).get('embed')==='1'){
+          var s=document.createElement('style');
+          s.textContent='header.admin-header{display:none!important;} .admin-container{padding-top:8px!important;}';
+          document.head.appendChild(s);
+        }
+      } catch(e){}
+    })();
+    </script>
 </head>
 <body>
     <!-- Login Overlay -->
@@ -4514,6 +4526,18 @@
                                             <span class="widget-launch-option-desc">Crestwood University</span>
                                         </div>
                                     </a>
+                                </div>
+                                <div class="widget-launch-section">
+                                    <div class="widget-launch-section-title">This Site</div>
+                                    <button type="button" class="widget-launch-option" style="width:100%;border:none;background:none;text-align:left;cursor:pointer;" onclick="cwsApplyToPortal();closeWidgetLaunchMenu();">
+                                        <div class="widget-launch-option-icon" style="background: linear-gradient(135deg, #0C3B5E 0%, #0F6CBD 100%);">
+                                            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                                        </div>
+                                        <div class="widget-launch-option-text">
+                                            <span class="widget-launch-option-title">Apply to Portal</span>
+                                            <span class="widget-launch-option-desc">Push current profile to your D365 portal</span>
+                                        </div>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -13323,11 +13347,44 @@ ${googleFontLink ? `\n<!-- Google Font -->\n<link href="${googleFontLink}" rel="
         }
         
         // Close on Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && document.getElementById('feedbackModal').classList.contains('show')) {
-                closeFeedbackModal();
-            }
-        });
+    <script>
+    // PORTAL INTEGRATION: "Apply to Portal" — sends active profile's Gist ID to parent portal via postMessage
+    function cwsApplyToPortal(){
+      try {
+        var activeId = localStorage.getItem('chatWidgetActiveProfile');
+        var gistId = null;
+        if (activeId) {
+          var raw = localStorage.getItem('chatWidgetProfiles');
+          if (raw) {
+            var profiles = JSON.parse(raw);
+            var match = profiles.find(function(p){ return p.id === activeId; });
+            if (match) gistId = match.cloudId || match.gistId || null;
+          }
+        }
+        if (!gistId) {
+          gistId = new URLSearchParams(location.search).get('gistId') || null;
+        }
+        if (!gistId) {
+          alert('No active profile Gist ID found. Please save your widget first, then try again.');
+          return;
+        }
+        window.parent.postMessage({ type: 'cws-apply', gistId: gistId }, '*');
+        var btn = document.querySelector('.widget-launch-option[onclick*="cwsApplyToPortal"]');
+        if (btn) {
+          var orig = btn.querySelector('.widget-launch-option-title');
+          if (orig) { var t = orig.textContent; orig.textContent = '\u2713 Sent to Portal!'; setTimeout(function(){ orig.textContent = t; }, 2500); }
+        }
+      } catch(e) { console.error('cwsApplyToPortal error:', e); }
+    }
+    window.cwsApplyToPortal = cwsApplyToPortal;
+
+    // Restore: close feedback modal on Escape
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        var m = document.getElementById('feedbackModal');
+        if (m && m.classList.contains('show')) { if(typeof closeFeedbackModal==='function') closeFeedbackModal(); }
+      }
+    });
     </script>
 </body>
 </html>
