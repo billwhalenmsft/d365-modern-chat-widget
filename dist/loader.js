@@ -15,7 +15,7 @@
 (function() {
   'use strict';
   
-  var WIDGET_CORE_URL = 'https://moliveirapinto.github.io/d365-modern-chat-widget/dist/widget-core.js';
+  var WIDGET_CORE_URL = 'https://billwhalenmsft.github.io/d365-modern-chat-widget/dist/widget-core.js';
   
   function loadScript(url, callback) {
     var script = document.createElement('script');
